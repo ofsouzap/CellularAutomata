@@ -2,6 +2,7 @@ from typing import Callable as tCallable;
 from typing import List as tList;
 from typing import Tuple as tTuple;
 from matplotlib import pyplot as plt;
+from matplotlib import cm as mpl_cm;
 import numpy as np;
 import pygame;
 import time;
@@ -11,25 +12,16 @@ import time;
 # All cells are initialised to 0 when the grid is created
 
 PYGAME_WINDOW_WIDTH = 400;
-PYGAME_BACKGROUND_COLOR = (255, 255, 255);
-
-def cell_color_function(v: int) -> tTuple[int, int, int]:
-
-    """Example function used to get an RGB color from a cell's value"""
-
-    r = (1 - (v & 1)) * 255;
-    g = (1 - (((v >> 1) & 1))) * 255;
-    b = (1 - (((v >> 2) & 1))) * 255;
-
-    return (r, g, b);
+BACKGROUND_COLOR = (255, 255, 255);
 
 class Automaton:
 
     def __init__(self,
         width: int,
         initial_values: tList[tTuple[tTuple[int, int], int]],
-        nbhood_width: int,
-        transition: tCallable[[tList[int]], int]):
+        nb_range: int,
+        transition: tCallable[[tList[int]], int],
+        colormap: tCallable[[int], int]):
 
         # Initialise the array of values
 
@@ -42,12 +34,15 @@ class Automaton:
 
             self._array[coords[0], coords[1]] = v;
 
-        # The width of the square of cells centered around the cell being changed which are inputted to the transition function to determine the next state of the selected cell
-        assert nbhood_width % 2 == 1;
-        self.nb_range = (nbhood_width - 1) // 2;
+        # The number of cells to any side of the cell that are considered when deciding the cell's next state
+        assert nb_range > 0;
+        self.nb_range = nb_range;
 
         # The transition function applied to cells
         self.transition = transition;
+
+        # The mapping from an integer value to an RGB color
+        self.colormap = colormap;
 
     def get_width(self) -> int:
         return self._array.shape[0];
@@ -116,7 +111,7 @@ class Automaton:
             for x in range(self.get_width()):
 
                 v = self._array[y, x];
-                c = cell_color_function(v);
+                c = self.colormap(v);
 
                 pygame.draw.rect(
                     surface = surface,
@@ -131,7 +126,8 @@ class Automaton:
 
 # Conway's game of life
 
-GAME_OF_LIFE_NB_WIDTH = 3;
+GAME_OF_LIFE_NB_RANGE = 1;
+
 def game_of_life_transition(nb: tList[int]) -> int:
 
     self = nb[4];
@@ -146,6 +142,9 @@ def game_of_life_transition(nb: tList[int]) -> int:
         return 1 if (2 <= alive_nbs <= 3) else 0;
     else:
         return 1 if alive_nbs == 3 else 0;
+
+def game_of_life_colormap(v: int) -> int:
+    return (0, 0, 0) if v != 0 else BACKGROUND_COLOR;
 
 GAME_OF_LIFE_GLIDER_INIT = [
     ((1, 2), 1),
@@ -164,6 +163,39 @@ GAME_OF_LIFE_HONEY_FARM_INIT = [
     ((7, 9), 1),
     ((7, 10), 1),
 ];
+
+# Heat conduction example
+
+HEAT_CONDUCTION_NB_RANGE = 1;
+
+def heat_conduction_transition(nb: tList[int]) -> int:
+
+    # Estimate Laplacian to get heat transfer
+
+    lap = 0;
+
+    lap += (nb[5] - nb[4]) - (nb[4] - nb[3]); # Rightwards double gradient
+    lap += (nb[7] - nb[4]) - (nb[4] - nb[1]); # Downwards double gradient
+    lap += (nb[8] - nb[4]) - (nb[4] - nb[0]); # Diagonal (down-right) double gradient
+
+    # Use Laplacian as change in current value
+
+    lap /= 6;
+    new_v = nb[4] + lap;
+    return new_v;
+
+def heat_conduction_colormap(v: int) -> tTuple[int, int, int]:
+
+    # Heat maximum is taken to be 1024 for colormapping
+
+    color_a = mpl_cm.jet(float(v) / 1024);
+
+    return tuple(map(lambda v: int(v * 255), color_a[0:3]));
+
+HEAT_CONDUCTION_POINT_INIT = [];
+for y in range(45, 56):
+    for x in range(45, 56):
+        HEAT_CONDUCTION_POINT_INIT.append(((y, x), 1024));
 
 # Main functions
 
@@ -189,13 +221,13 @@ def run_pygame_interface(a: Automaton):
 
     while running:
 
-        clock.tick(5);
+        clock.tick(1);
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 running = False;
 
-        window.fill(PYGAME_BACKGROUND_COLOR);
+        window.fill(BACKGROUND_COLOR);
 
         a.draw_on_pygame_surface(window);
 
@@ -207,12 +239,23 @@ def run_pygame_interface(a: Automaton):
 
 def main():
 
+    # Game of life automaton
     a = Automaton(
         width = 15,
         initial_values = GAME_OF_LIFE_GLIDER_INIT,
-        nbhood_width = GAME_OF_LIFE_NB_WIDTH,
-        transition = game_of_life_transition
+        nb_range = GAME_OF_LIFE_NB_RANGE,
+        transition = game_of_life_transition,
+        colormap = game_of_life_colormap
     );
+
+    # Heat conduction automaton
+    a = Automaton(
+        width = 100,
+        initial_values = HEAT_CONDUCTION_POINT_INIT,
+        nb_range = HEAT_CONDUCTION_NB_RANGE,
+        transition = heat_conduction_transition,
+        colormap = heat_conduction_colormap
+    )
 
     run_pygame_interface(a);
 
