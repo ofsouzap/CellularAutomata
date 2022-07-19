@@ -3,11 +3,25 @@ from typing import List as tList;
 from typing import Tuple as tTuple;
 from matplotlib import pyplot as plt;
 import numpy as np;
-from numpy import ndarray;
+import pygame;
+import time;
 
 # This program simulates 2-dimensional cellular automata
 # States of cells are int values
 # All cells are initialised to 0 when the grid is created
+
+PYGAME_WINDOW_WIDTH = 400;
+PYGAME_BACKGROUND_COLOR = (255, 255, 255);
+
+def cell_color_function(v: int) -> tTuple[int, int, int]:
+
+    """Example function used to get an RGB color from a cell's value"""
+
+    r = (1 - (v & 1)) * 255;
+    g = (1 - (((v >> 1) & 1))) * 255;
+    b = (1 - (((v >> 2) & 1))) * 255;
+
+    return (r, g, b);
 
 class Automaton:
 
@@ -34,6 +48,9 @@ class Automaton:
 
         # The transition function applied to cells
         self.transition = transition;
+
+    def get_width(self) -> int:
+        return self._array.shape[0];
 
     def next_step(self) -> None:
 
@@ -70,11 +87,11 @@ class Automaton:
 
         output = "";
 
-        for y in range(self._array.shape[0]):
+        for y in range(self.get_width()):
 
             line = "";
 
-            for x in range(self._array.shape[1]):
+            for x in range(self.get_width()):
 
                 v = self._array[y, x];
                 v_str = str(v) if v != 0 else " ";
@@ -85,11 +102,32 @@ class Automaton:
             output = output + line + "\n"; # Append line to output
 
             # Row-separator line
-            sep_line = "-+" * self._array.shape[0];
+            sep_line = "-+" * self.get_width();
             sep_line = sep_line[:-1];
             output = output + sep_line + "\n";
         
         print(output);
+
+    def draw_on_pygame_surface(self, surface: pygame.Surface) -> None:
+
+        cell_width = surface.get_width() / self.get_width();
+        
+        for y in range(self.get_width()):
+            for x in range(self.get_width()):
+
+                v = self._array[y, x];
+                c = cell_color_function(v);
+
+                pygame.draw.rect(
+                    surface = surface,
+                    color = c,
+                    rect = (
+                        x * cell_width,
+                        y * cell_width,
+                        cell_width,
+                        cell_width
+                    )
+                );
 
 # Conway's game of life
 
@@ -127,14 +165,9 @@ GAME_OF_LIFE_HONEY_FARM_INIT = [
     ((7, 10), 1),
 ];
 
-def main():
+# Main functions
 
-    a = Automaton(
-        width = 15,
-        initial_values = GAME_OF_LIFE_HONEY_FARM_INIT,
-        nbhood_width = GAME_OF_LIFE_NB_WIDTH,
-        transition = game_of_life_transition
-    );
+def run_console_interface(a: Automaton):
 
     # Basic console-based interface. Intend to move to matplotlib interface sometime using the numpy array
     while True:
@@ -142,6 +175,46 @@ def main():
         a.display_on_console();
         input();
         a.next_step();
+
+def run_pygame_interface(a: Automaton):
+
+    # Set-up
+
+    pygame.init();
+
+    window = pygame.display.set_mode(size = (PYGAME_WINDOW_WIDTH, PYGAME_WINDOW_WIDTH));
+    clock = pygame.time.Clock();
+
+    running = True;
+
+    while running:
+
+        clock.tick(5);
+
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                running = False;
+
+        window.fill(PYGAME_BACKGROUND_COLOR);
+
+        a.draw_on_pygame_surface(window);
+
+        a.next_step();
+
+        pygame.display.flip();
+
+    pygame.quit();
+
+def main():
+
+    a = Automaton(
+        width = 15,
+        initial_values = GAME_OF_LIFE_GLIDER_INIT,
+        nbhood_width = GAME_OF_LIFE_NB_WIDTH,
+        transition = game_of_life_transition
+    );
+
+    run_pygame_interface(a);
 
 if __name__ == "__main__":
     main();
